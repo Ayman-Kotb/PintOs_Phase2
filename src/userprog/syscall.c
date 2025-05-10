@@ -4,7 +4,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
+#include "process.h"
 static void syscall_handler (struct intr_frame *);
 
 void
@@ -29,7 +29,7 @@ static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
   if (f==NULL ||f->esp == NULL ){
-    exit(-1);
+    return;
   }
   
   printf ("system call!\n");
@@ -39,15 +39,13 @@ syscall_handler (struct intr_frame *f UNUSED)
     shutdown_power_off();
   }
   else if (syscall == SYS_EXIT){
-    args[0] = *((int*)f->esp +1);
-    printf ("exit %d\n", args[0]);
-    exit(args[0]);
+   process_exit();
   }
   else if (syscall == SYS_EXEC){
     
   } 
   else if (syscall == SYS_WAIT){
-    
+    process_wait(*(int*) (f->esp+4));
   }
   else if (syscall == SYS_CREATE){
     

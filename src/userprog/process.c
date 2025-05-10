@@ -44,9 +44,18 @@ process_execute (const char *file_name)
 	/* Parsed file name */
 	char *save_ptr;
 	file_name = strtok_r((char *) file_name, " ", &save_ptr);
-
+    struct thread *t=thread_current(); 
 	/* Create a new thread to execute FILE_NAME. */
+	//adding spawned thread to the parent thread
 	tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+	struct list_elem *le;
+	struct thread *tmp;
+	for(le=list_begin(&all_list);le!=list_end(&all_list);le=list_next(le)){
+		tmp=list_entry(le,struct thread,allelem);
+        if(tmp->tid==tid) break; 
+	}
+	list_push_back(&t->sons,&tmp->son);
+	//////////////////////////////////////////////////
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -97,8 +106,22 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
+	struct list_elem *le;
+	struct thread *tmp=thread_current();
+	struct thread *child;
+	bool flag=false;
+	for(le=list_begin(&tmp->sons);;le=list_next(le)){
+		if(le==list_end(&tmp->sons)){
+			flag=true;
+			break;
+		}
+		child=list_entry(le,struct thread,son);
+        if(child->tid==child_tid) break;
+	}
+    if(!flag) 
+	sema_down(&child->s);
 	return -1;
 }
 
@@ -108,7 +131,8 @@ process_exit (void)
 {
 	struct thread *cur = thread_current ();
 	uint32_t *pd;
-
+    sema_up(&cur->s);
+	    
 	/* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
 	pd = cur->pagedir;
