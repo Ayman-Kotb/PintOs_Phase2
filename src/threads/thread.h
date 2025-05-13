@@ -95,7 +95,13 @@ struct thread
     struct list_elem elem;              /* List element. */
     struct list sons;
     struct list_elem son;
-    struct semaphore s;
+
+    int status_exit;  
+    struct semaphore semaphore1;
+    bool success; 
+    struct thread* parent; 
+    struct list files;  
+
       
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -104,7 +110,6 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-    int exit;           //  Exit status to return to parent
   };
 
 /* If false (default), use round-robin scheduler.

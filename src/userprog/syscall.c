@@ -35,28 +35,25 @@ syscall_handler (struct intr_frame *f)
     thread_exit();
     return;
   }
-  printf ("system call!\n");
-  void *esp = f->esp;
-  int syscall =*(int*)esp;
 
+  int syscall = *(int *) f->esp;
   if (syscall == SYS_HALT){
     shutdown_power_off();
   }
-
   else if (syscall == SYS_EXIT){
    int status = *(int *)(f->esp + 4);
    struct thread *cur = thread_current();
-   cur->exit = status;  
-   printf("%s: exit(%d)\n", cur->name, status);
-   process_exit();
+   cur->status_exit = status; 
+   printf("%s: exit(%d)\n", thread_current()->name, status); 
+   thread_exit();
   }
   else if (syscall == SYS_EXEC){
-    char *cmd_line = *(char **)(f->esp + 4);
+    char *cmd_line = (char *) *(int *)(f->esp + 4);
     tid_t child_tid = process_execute(cmd_line);
     f->eax = child_tid;
-  } 
+  }
   else if (syscall == SYS_WAIT){
-    process_wait(*(int*) (f->esp+4));
+    f->eax = process_wait(*(int*) (f->esp+4));
   }
   else if (syscall == SYS_CREATE){
     //filesys_create();
@@ -71,9 +68,27 @@ syscall_handler (struct intr_frame *f)
     //
   }
   else if (syscall == SYS_READ){
+    int fd = *(int *)(f->esp + 4);
+    const void *buffer = (void *) *(int *)(f->esp + 8);
+    unsigned size = *(int *)(f->esp + 12);
+
+    if (fd == 0) {
+      for (unsigned i = 0; i < size; i++) {
+        ((char *)buffer)[i] = input_getc();
+      }
+      f->eax = size;
+    }
     //file_read();
   }
   else if (syscall == SYS_WRITE){
+    int fd = *(int *)(f->esp + 4);
+    const void *buffer = (void *) *(int *)(f->esp + 8);
+    unsigned size = *(int *)(f->esp + 12);
+
+    if (fd == 1) {
+      putbuf(buffer, size);
+      f->eax = size;
+    } 
    // file_write();
   }
   else if (syscall == SYS_SEEK){
@@ -84,6 +99,10 @@ syscall_handler (struct intr_frame *f)
   }
   else if (syscall == SYS_CLOSE){
    // file_close(f);
+
   }
-  thread_exit ();
+  else{
+    
+  }
+
 }

@@ -33,7 +33,6 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp, char** s
    {
 	   char *fn_copy;
 	   tid_t tid;
-   
 	   /* Make a copy of FILE_NAME.
 		  Otherwise there's a race between the caller and load(). */
 	   fn_copy = palloc_get_page (0);
@@ -47,10 +46,16 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp, char** s
    
 	   /* Create a new thread to execute PROGRAM_NAME */
 	   tid = thread_create (program_name, PRI_DEFAULT, start_process, fn_copy);
+
+	   sema_down(&thread_current()->semaphore1);
+
+	   if(!thread_current()->success)tid = TID_ERROR ; 
    
 	   if (tid == TID_ERROR){
 		   palloc_free_page (fn_copy);
+		   return tid;
 	   }
+	   
 	   return tid;
    }
    
@@ -60,6 +65,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp, char** s
 static void
 start_process (void *file_name_)
 {
+
 	char *file_name = file_name_;
 	struct intr_frame if_;
 	bool success;
@@ -74,11 +80,20 @@ start_process (void *file_name_)
 	if_.cs = SEL_UCSEG;
 	if_.eflags = FLAG_IF | FLAG_MBS;
 	success = load (file_name, &if_.eip, &if_.esp, &save_ptr);
+    //////////
 
+
+	thread_current()->parent->success = success ; 
+	sema_up(&thread_current()->parent->semaphore1);
+
+    //////////////////
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
 	if (!success)
 		thread_exit ();
+	else{
+		sema_down(&thread_current()->semaphore1);
+	}
 
 	/* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -120,9 +135,11 @@ process_wait (tid_t child_tid)
 		child=list_entry(le,struct thread,son);
         if(child->tid==child_tid) break;
 	}
-    if(!flag) 
-	sema_down(&child->s);
-	return -1;
+    if(!flag) {
+		sema_up(&child->semaphore1);
+		sema_down(&thread_current()->semaphore1);
+	}
+	return child->status_exit;
 }
 
 /* Free the current process's resources. */
@@ -131,8 +148,8 @@ process_exit (void)
 {
 	struct thread *cur = thread_current ();
 	uint32_t *pd;
-    sema_up(&cur->s);
-	    
+
+    sema_up(&cur->parent->semaphore1);
 	/* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
 	pd = cur->pagedir;
@@ -349,6 +366,7 @@ load (const char *file_name, void (**eip) (void), void **esp, char **save_ptr)
 
 	done:
 	/* We arrive here whether the load is successful or not. */
+	file_deny_write(file);
 	file_close (file);
 	return success;
 }
