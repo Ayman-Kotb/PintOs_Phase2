@@ -8,6 +8,22 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 static void syscall_handler (struct intr_frame *);
+static struct lock file_lock;
+int x = 0 ;
+static bool isValid_ptr (const void* ptr){
+  if (ptr>= (void*) 0xc0000000 || ptr < (void*) 0x8048000 ){
+    return false;
+  }
+  return true;
+} 
+bool create(const char* file, unsigned initial_size){
+  bool created = filesys_create(file, initial_size);
+  return created;
+}
+static bool remove(const char* file){
+  bool removed = filesys_remove(file);
+  return removed;
+}
 
 void
 syscall_init (void) 
@@ -31,6 +47,8 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
+  if (x==0)lock_init(&file_lock);
+  x++;
   if (f==NULL ||f->esp == NULL ){
     thread_exit();
     return;
@@ -53,15 +71,31 @@ syscall_handler (struct intr_frame *f)
     f->eax = child_tid;
   }
   else if (syscall == SYS_WAIT){
-    f->eax = process_wait(*(int*) (f->esp+4));
+    int* tid = (int *)(f->esp + 4);
+    if (!isValid_ptr((void*)tid)) return -1;
+    else f->eax = process_wait(*(int*) (f->esp+4));
   }
   else if (syscall == SYS_CREATE){
+    
+    int fd = *((int *)(f->esp)+1);
+    if (!isValid_ptr((void*)fd)) f->eax = 0;
+    int size = *((int*)(f->esp)+2) ;
+    lock_acquire(&file_lock);
+    bool created = create((char*) fd, size);
+    lock_release(&file_lock);
+    f->eax = created;
     //filesys_create();
   }
   else if (syscall == SYS_REMOVE){
-    //filesys_remove();
+    int fd = *((int *)(f->esp)+1);
+    if (!isValid_ptr((void*)fd)) f->eax = 0;
+    lock_acquire(&file_lock);
+    bool removed = remove((char*)fd);
+    lock_release(&file_lock);
+    f->eax = (removed==true) ? 1 : 0 ;
   }
   else if (syscall == SYS_OPEN){
+
    // file_open();
   }
   else if (syscall == SYS_FILESIZE){
@@ -81,10 +115,9 @@ syscall_handler (struct intr_frame *f)
     //file_read();
   }
   else if (syscall == SYS_WRITE){
-    int fd = *(int *)(f->esp + 4);
-    const void *buffer = (void *) *(int *)(f->esp + 8);
+    int fd = *(int *)(f->esp +4);
+    const void *buffer = (void *) *(int *)(f->esp+8);
     unsigned size = *(int *)(f->esp + 12);
-
     if (fd == 1) {
       putbuf(buffer, size);
       f->eax = size;
