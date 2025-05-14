@@ -92,16 +92,19 @@ syscall_handler (struct intr_frame *f)
   }
   else if (syscall == SYS_REMOVE){
     int fd = *((int *)(f->esp)+1);
-    if (!isValid_ptr((void*)fd)) f->eax = 0;
+    if (!isValid_ptr((void*)fd)) f->eax = false;
     lock_acquire(&file_lock);
     bool removed = remove((char*)fd);
     lock_release(&file_lock);
-    f->eax = (removed==true) ? 1 : 0 ;
+    f->eax = (removed==true) ? true : false ;
   }
-  else if (syscall == SYS_OPEN){
-
-   // file_open();
-  }
+  else if (syscall == SYS_OPEN) {
+    // Get filename argument from stack
+    const char *file = *(const char **)(f->esp + 4);
+      
+    // Call your implementation
+    f->eax = open(file);
+}
   else if (syscall == SYS_FILESIZE){
     
   }
@@ -135,7 +138,27 @@ syscall_handler (struct intr_frame *f)
     //file_tell();
   }
   else if (syscall == SYS_CLOSE){
-   // file_close(f);
+    int fd = *(int *)(f->esp + 4);
+    if (fd < 2 || fd >= 128)
+    return;
+    
+  struct thread *curr = thread_current();
+  
+  // Check if the file descriptor is actually in use
+  if (curr->fd_table[fd] == NULL)
+    return;
+    
+  // Acquire the filesystem lock to prevent race conditions
+  lock_acquire(&file_lock);
+  
+  // Close the file
+  file_close(curr->fd_table[fd]);
+  
+  // Clear the file descriptor entry
+  curr->fd_table[fd] = NULL;
+  
+  // Release the filesystem lock
+  lock_release(&file_lock);
 
   }
 }
@@ -164,4 +187,37 @@ tid_t executer(void* esp){
 }
 tid_t waiter(void* esp){
     return process_wait(*(int*) (esp+4));
+}
+
+int open(const char *file) {
+  // Check for null pointer
+  if (file == NULL)
+    return -1;
+    
+  // Get current thread
+  struct thread *curr = thread_current();
+  
+  // Acquire the filesystem lock to prevent race conditions
+  lock_acquire(&file_lock);
+  
+  // Open the file using the PintOS filesystem
+  struct file *file_ptr = filesys_open(file);
+  
+  // Release the filesystem lock
+  lock_release(&file_lock);
+  
+  // Check if the file was opened successfully
+  if (file_ptr == NULL)
+    return -1;
+    
+  // Find an available file descriptor
+  int fd;
+  for (fd = 2; fd < 128; fd++) {
+    if (curr->fd_table[fd] == NULL) {
+      curr->fd_table[fd] = file_ptr;
+      return fd;
+    }
+  }
+  
+  return -1;
 }
