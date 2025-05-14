@@ -99,7 +99,7 @@ struct thread
 
     int status_exit;  
     struct semaphore semaphore1;
-    struct semaphore semaphore2;
+   
     bool success; 
     struct thread* parent; 
     struct thread *waiting_for;

@@ -102,7 +102,7 @@ start_process (void *file_name_)
 	if (!success)
 		thread_exit ();
 	else{
-		sema_down(&thread_current()->semaphore2);
+		sema_down(&thread_current()->semaphore1);
 	}
 
 	/* Start the user process by simulating a return from an
@@ -142,10 +142,10 @@ process_wait (tid_t child_tid)
         if(child->tid==child_tid) break;
 	}
     if(!flag&&!list_empty(&tmp->sons)) {
-		sema_up(&child->semaphore2);
+		sema_up(&child->semaphore1);
 		list_remove(&child->son);
 		thread_current()->waiting_for=child;
-		sema_down(&thread_current()->semaphore2);
+		sema_down(&thread_current()->semaphore1);
 	}
 	else return -1;
 	return thread_current()->status_exit;
@@ -169,11 +169,11 @@ void process_exit(void) {
     while (!list_empty(&cur->sons)) {
         struct list_elem *e = list_pop_front(&cur->sons);
         struct thread *child = list_entry(e, struct thread, son);
-        sema_up(&child->semaphore2);
+        sema_up(&child->semaphore1);
     }
     // Notify parent
     if (cur->parent->waiting_for==cur) {
-        sema_up(&cur->parent->semaphore2);
+        sema_up(&cur->parent->semaphore1);
     }
 
     
