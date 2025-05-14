@@ -194,6 +194,9 @@ thread_create (const char *name, int priority,
      member cannot be observed. */
 	old_level = intr_disable ();
 
+	for (int i = 0; i < 128; i++)
+    		t->fd_table[i] = NULL;
+
 	/* Stack frame for kernel_thread(). */
 	kf = alloc_frame (t, sizeof *kf);
 	kf->eip = NULL;
