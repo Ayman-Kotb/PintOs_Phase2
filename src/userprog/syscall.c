@@ -7,6 +7,11 @@
 #include "process.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "threads/vaddr.h"
+#include "pagedir.h"
+#include "devices/shutdown.h"
+#include <list.h>
+
 static void syscall_handler (struct intr_frame *);
 static struct lock file_lock;
 int x = 0 ;
@@ -25,6 +30,11 @@ static bool remove(const char* file){
   return removed;
 }
 
+struct opened_file {
+  int file_d;
+  struct file* f;
+};
+static struct lock file_lock;
 void
 syscall_init (void) 
 {
@@ -56,19 +66,13 @@ syscall_handler (struct intr_frame *f)
 
   int syscall = *(int *) f->esp;
   if (syscall == SYS_HALT){
-    shutdown_power_off();
+    halter();
   }
   else if (syscall == SYS_EXIT){
-   int status = *(int *)(f->esp + 4);
-   struct thread *cur = thread_current();
-   cur->status_exit = status; 
-   printf("%s: exit(%d)\n", thread_current()->name, status); 
-   thread_exit();
+    exiter(f->esp);
   }
   else if (syscall == SYS_EXEC){
-    char *cmd_line = (char *) *(int *)(f->esp + 4);
-    tid_t child_tid = process_execute(cmd_line);
-    f->eax = child_tid;
+    f->eax = executer(f->esp);
   }
   else if (syscall == SYS_WAIT){
     int* tid = (int *)(f->esp + 4);
@@ -99,16 +103,16 @@ syscall_handler (struct intr_frame *f)
    // file_open();
   }
   else if (syscall == SYS_FILESIZE){
-    //
+    
   }
   else if (syscall == SYS_READ){
-    int fd = *(int *)(f->esp + 4);
-    const void *buffer = (void *) *(int *)(f->esp + 8);
-    unsigned size = *(int *)(f->esp + 12);
+    int stream = get_paramater(f->esp,4);
+    const void *bfr = (void *) get_paramater(f->esp,8);
+    unsigned size = get_paramater(f->esp,12);
 
-    if (fd == 0) {
+    if (stream == 0) {
       for (unsigned i = 0; i < size; i++) {
-        ((char *)buffer)[i] = input_getc();
+        ((char *)bfr)[i] = input_getc();
       }
       f->eax = size;
     }
@@ -122,7 +126,7 @@ syscall_handler (struct intr_frame *f)
       putbuf(buffer, size);
       f->eax = size;
     } 
-   // file_write();
+   
   }
   else if (syscall == SYS_SEEK){
     //file_seek();
@@ -134,8 +138,30 @@ syscall_handler (struct intr_frame *f)
    // file_close(f);
 
   }
-  else{
-    
-  }
+}
+void validate_ptr(const void *ptr){
+  if(ptr==NULL||!is_user_vaddr(ptr)) thread_exit();
+ 
+}
+int get_paramater(void *esp,int offset){
+  return *(int *)(esp + offset);
+}
 
+void halter(){
+    shutdown_power_off();
+}
+
+void exiter(void *esp){
+   int status = get_paramater(esp,4);
+   struct thread *cur = thread_current();
+   cur->status_exit = status; 
+   printf("%s: exit(%d)\n", thread_current()->name, status); 
+   thread_exit();
+}
+tid_t executer(void* esp){
+    char *cmd_line = (char *) get_paramater(esp,4);
+    return process_execute(cmd_line);   
+}
+tid_t waiter(void* esp){
+    return process_wait(*(int*) (esp+4));
 }
