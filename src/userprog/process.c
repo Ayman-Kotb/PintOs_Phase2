@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include <list.h>
 
 /* Used for setup_stack */
 static void push_stack(int order, void **esp, char *token, char **argv, int argc);
@@ -54,7 +55,6 @@ tid_t process_execute(const char *file_name)
   
   /* Create a new thread to execute FILE_NAME - passing the full command line */
   tid = thread_create(program_name, PRI_DEFAULT, start_process, fn_copy);
-  
   sema_down(&thread_current()->semaphore1);
   if(!thread_current()->success)
     tid = TID_ERROR;
@@ -102,7 +102,7 @@ start_process (void *file_name_)
 	if (!success)
 		thread_exit ();
 	else{
-		sema_down(&thread_current()->semaphore1);
+		sema_down(&thread_current()->semaphore2);
 	}
 
 	/* Start the user process by simulating a return from an
@@ -127,11 +127,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid) 
 {
-	// while (true)
-	// {
-	// 	thread_yield();
-	// }
-	// return -1 ;
+	
 	
 	struct list_elem *le;
 	struct thread *tmp=thread_current();
@@ -145,37 +141,47 @@ process_wait (tid_t child_tid)
 		child=list_entry(le,struct thread,son);
         if(child->tid==child_tid) break;
 	}
-    if(!flag) {
-		sema_up(&child->semaphore1);
-		sema_down(&thread_current()->semaphore1);
+    if(!flag&&!list_empty(&tmp->sons)) {
+		sema_up(&child->semaphore2);
+		list_remove(&child->son);
+		thread_current()->waiting_for=child;
+		sema_down(&thread_current()->semaphore2);
 	}
-	return child->status_exit;
+	else return -1;
+	return thread_current()->status_exit;
 }
 
 /* Free the current process's resources. */
-void
-process_exit (void)
-{
-	struct thread *cur = thread_current ();
-	uint32_t *pd;
-
-    sema_up(&cur->parent->semaphore1);
-	/* Destroy the current process's page directory and switch back
-     to the kernel-only page directory. */
-	pd = cur->pagedir;
-	if (pd != NULL)
-	{
-		/* Correct ordering here is crucial.  We must set
-         cur->pagedir to NULL before switching page directories,
-         so that a timer interrupt can't switch back to the
-         process page directory.  We must activate the base page
-         directory before destroying the process's page
-         directory, or our active page directory will be one
-         that's been freed (and cleared). */
-		cur->pagedir = NULL;
-		pagedir_activate (NULL);
-		pagedir_destroy (pd);
+void process_exit(void) {
+    struct thread *cur = thread_current();
+    while(!list_empty(&cur->holded_locks)){
+	    struct list_elem *e = list_pop_front(&cur->sons);	
+		 struct lock *l = list_entry(e, struct lock, holded);
+		 lock_release(&l);
 	}
+	for(int fd=2;fd<128;fd++){
+		if(cur->fd_table[fd]!=NULL){
+		file_close(cur->fd_table[fd]);
+		cur->fd_table[fd]=NULL;
+		}
+	}
+    // Notify all children
+    while (!list_empty(&cur->sons)) {
+        struct list_elem *e = list_pop_front(&cur->sons);
+        struct thread *child = list_entry(e, struct thread, son);
+        sema_up(&child->semaphore2);
+    }
+    // Notify parent
+    if (cur->parent->waiting_for==cur) {
+        sema_up(&cur->parent->semaphore2);
+    }
+
+    
+    // Clean up page directory
+    if (cur->pagedir) {
+        pagedir_activate(NULL);
+        pagedir_destroy(cur->pagedir);
+    }
 }
 
 /* Sets up the CPU for running user code in the current

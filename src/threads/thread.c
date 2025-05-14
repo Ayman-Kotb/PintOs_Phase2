@@ -480,8 +480,11 @@ init_thread (struct thread *t, const char *name, int priority)
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
 	t->parent = NULL ; 
+	t->status_exit=0;
     list_init(&t->sons);
+	list_init(&t->holded_locks);
 	sema_init(&t->semaphore1,0);
+	sema_init(&t->semaphore2,0);
 	old_level = intr_disable ();
 	list_push_back (&all_list, &t->allelem);
 	intr_set_level (old_level);

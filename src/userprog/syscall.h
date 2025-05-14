@@ -1,6 +1,7 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 #include "threads/thread.h"
+#include <list.h>
 void syscall_init (void);
 void halter();
 void exiter(int status);

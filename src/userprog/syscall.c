@@ -10,7 +10,7 @@
 #include "threads/vaddr.h"
 #include "pagedir.h"
 #include "devices/shutdown.h"
-#include <list.h>
+
 static void syscall_handler (struct intr_frame *);
 static struct lock file_lock;
 int x = 0 ;
@@ -68,6 +68,7 @@ syscall_handler (struct intr_frame *f)
     halter();
   }
   else if (syscall == SYS_EXIT){
+   
     exiter(*get_paramater(f->esp,4));
   }
   else if (syscall == SYS_EXEC){
@@ -214,7 +215,7 @@ void halter(){
 
 void exiter(int status){
    struct thread *cur = thread_current();
-   cur->status_exit = status; 
+   cur->parent->status_exit = status; 
    printf("%s: exit(%d)\n", thread_current()->name, status); 
    thread_exit();
 }
@@ -230,7 +231,7 @@ int open(const char *file) {
   // Check for null pointer
   if (file == NULL)
     return -1;
-    
+  
   // Get current thread
   struct thread *curr = thread_current();
   

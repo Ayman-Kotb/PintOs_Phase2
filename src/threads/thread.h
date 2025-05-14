@@ -99,9 +99,11 @@ struct thread
 
     int status_exit;  
     struct semaphore semaphore1;
+    struct semaphore semaphore2;
     bool success; 
     struct thread* parent; 
-    struct list files;  
+    struct thread *waiting_for;
+    struct list holded_locks;
 
       
 #ifdef USERPROG
