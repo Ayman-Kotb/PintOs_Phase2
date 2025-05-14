@@ -11,14 +11,13 @@
 #include "pagedir.h"
 #include "devices/shutdown.h"
 #include <list.h>
-
 static void syscall_handler (struct intr_frame *);
 static struct lock file_lock;
 int x = 0 ;
+
 static bool isValid_ptr (const void* ptr){
-  if (ptr>= (void*) 0xc0000000 || ptr < (void*) 0x8048000 ){
-    return false;
-  }
+  if(!is_user_vaddr(ptr)||lookup_page(thread_current()->pagedir,ptr,false)==NULL) return false;
+
   return true;
 } 
 bool create(const char* file, unsigned initial_size){
@@ -69,13 +68,13 @@ syscall_handler (struct intr_frame *f)
     halter();
   }
   else if (syscall == SYS_EXIT){
-    exiter(f->esp);
+    exiter(*get_paramater(f->esp,4));
   }
   else if (syscall == SYS_EXEC){
     f->eax = executer(f->esp);
   }
   else if (syscall == SYS_WAIT){
-    int* tid = (int *)(f->esp + 4);
+    int* tid = get_paramater(f->esp,4);
     if (!isValid_ptr((void*)tid)) return -1;
     else f->eax = process_wait(*(int*) (f->esp+4));
   }
@@ -106,29 +105,67 @@ syscall_handler (struct intr_frame *f)
     f->eax = open(file);
 }
   else if (syscall == SYS_FILESIZE){
-    
+    int file_d=*get_paramater(f->esp,4);
+    if(file_d<2||file_d>128|| thread_current()->fd_table[file_d] == NULL){
+      f->eax=-1;   
+      return;
+    } 
+    lock_acquire(&file_lock);
+    f->eax=file_length(thread_current()->fd_table[file_d]);
+    lock_release(&file_lock);
   }
   else if (syscall == SYS_READ){
-    int stream = get_paramater(f->esp,4);
-    const void *bfr = (void *) get_paramater(f->esp,8);
-    unsigned size = get_paramater(f->esp,12);
-
-    if (stream == 0) {
+  
+    int fd = *get_paramater(f->esp,4);
+    void *bfr = (void *) *get_paramater(f->esp,8);
+    unsigned size = *get_paramater(f->esp,12);
+    
+    if(fd<0||fd>=128) return;
+    if (fd == 0) {
       for (unsigned i = 0; i < size; i++) {
+        lock_acquire(&file_lock);
         ((char *)bfr)[i] = input_getc();
+        lock_release(&file_lock);
       }
       f->eax = size;
     }
-    //file_read();
+    else if(fd==1){
+      
+    }
+    else{
+       struct file *file = thread_current()->fd_table[fd];
+        if (!file) {
+            f->eax = -1;
+            return;
+        }
+        lock_acquire(&file_lock);
+        f->eax = file_read(file, bfr, size); // Correct read
+        lock_release(&file_lock);
+    }
   }
   else if (syscall == SYS_WRITE){
-    int fd = *(int *)(f->esp +4);
-    const void *buffer = (void *) *(int *)(f->esp+8);
-    unsigned size = *(int *)(f->esp + 12);
-    if (fd == 1) {
-      putbuf(buffer, size);
+    int file_d = *get_paramater(f->esp,4);
+    const void *bfr = (void *) *get_paramater(f->esp,8);
+    unsigned size = *get_paramater(f->esp,12);
+    if(file_d<0||file_d>=128) return;
+    if (file_d == 1) {
+      lock_acquire(&file_lock);
+      putbuf(bfr, size);
+      lock_release(&file_lock);
       f->eax = size;
     } 
+    else if(file_d==0){
+      
+    }
+    else{
+      struct file* file=thread_current()->fd_table[file_d];
+      if(file==NULL) return -1;
+      lock_acquire(&file_lock);   
+      size=file_write(file,bfr,size);   
+      lock_release(&file_lock);
+      f->eax=size; 
+    }
+
    
   }
   else if (syscall == SYS_SEEK){
@@ -166,23 +203,23 @@ void validate_ptr(const void *ptr){
   if(ptr==NULL||!is_user_vaddr(ptr)) thread_exit();
  
 }
-int get_paramater(void *esp,int offset){
-  return *(int *)(esp + offset);
+int* get_paramater(void *esp,int offset){
+  if (!isValid_ptr((esp + offset))) exiter(-1);
+  return (int *)(esp + offset);
 }
 
 void halter(){
     shutdown_power_off();
 }
 
-void exiter(void *esp){
-   int status = get_paramater(esp,4);
+void exiter(int status){
    struct thread *cur = thread_current();
    cur->status_exit = status; 
    printf("%s: exit(%d)\n", thread_current()->name, status); 
    thread_exit();
 }
 tid_t executer(void* esp){
-    char *cmd_line = (char *) get_paramater(esp,4);
+    char *cmd_line = (char *) *get_paramater(esp,4);
     return process_execute(cmd_line);   
 }
 tid_t waiter(void* esp){
