@@ -28,36 +28,46 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp, char** s
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
-   tid_t
-   process_execute (const char *file_name) 
-   {
-	   char *fn_copy;
-	   tid_t tid;
-	   /* Make a copy of FILE_NAME.
-		  Otherwise there's a race between the caller and load(). */
-	   fn_copy = palloc_get_page (0);
-	   if (fn_copy == NULL)
-		   return TID_ERROR;
-	   strlcpy (fn_copy, file_name, PGSIZE);
-   
-	   /* Parse the program name (first token) */
-	   char *save_ptr;
-	   char *program_name = strtok_r(fn_copy, " ", &save_ptr);
-   
-	   /* Create a new thread to execute PROGRAM_NAME */
-	   tid = thread_create (program_name, PRI_DEFAULT, start_process, fn_copy);
-
-	   sema_down(&thread_current()->semaphore1);
-
-	   if(!thread_current()->success)tid = TID_ERROR ; 
-   
-	   if (tid == TID_ERROR){
-		   palloc_free_page (fn_copy);
-		   return tid;
-	   }
-	   
-	   return tid;
-   }
+tid_t process_execute(const char *file_name)
+{
+  char *fn_copy;
+  tid_t tid;
+  
+  /* Make a copy of FILE_NAME.
+     Otherwise there's a race between the caller and load(). */
+  fn_copy = palloc_get_page(0);
+  if (fn_copy == NULL)
+    return TID_ERROR;
+  strlcpy(fn_copy, file_name, PGSIZE);
+  
+  /* Make another copy for parsing the program name */
+  char *name_copy = palloc_get_page(0);
+  if (name_copy == NULL) {
+    palloc_free_page(fn_copy);
+    return TID_ERROR;
+  }
+  strlcpy(name_copy, file_name, PGSIZE);
+  
+  /* Parse the program name (first token) */
+  char *save_ptr;
+  char *program_name = strtok_r(name_copy, " ", &save_ptr);
+  
+  /* Create a new thread to execute FILE_NAME - passing the full command line */
+  tid = thread_create(program_name, PRI_DEFAULT, start_process, fn_copy);
+  
+  sema_down(&thread_current()->semaphore1);
+  if(!thread_current()->success)
+    tid = TID_ERROR;
+  
+  if (tid == TID_ERROR) {
+    palloc_free_page(fn_copy);
+    palloc_free_page(name_copy);
+    return tid;
+  }
+  
+  palloc_free_page(name_copy);  // Free the temporary name copy
+  return tid;
+}
    
 
 /* A thread function that loads a user process and starts it
