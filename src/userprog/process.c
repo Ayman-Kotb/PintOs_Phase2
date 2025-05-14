@@ -169,6 +169,7 @@ void process_exit(void) {
     while (!list_empty(&cur->sons)) {
         struct list_elem *e = list_pop_front(&cur->sons);
         struct thread *child = list_entry(e, struct thread, son);
+		child->parent=NULL;
         sema_up(&child->semaphore1);
     }
     // Notify parent

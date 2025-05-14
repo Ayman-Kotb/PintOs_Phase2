@@ -14,10 +14,8 @@
 static void syscall_handler (struct intr_frame *);
 static struct lock file_lock;
 int x = 0 ;
-
 static bool isValid_ptr (const void* ptr){
   if(!is_user_vaddr(ptr)||lookup_page(thread_current()->pagedir,ptr,false)==NULL) return false;
-
   return true;
 } 
 bool create(const char* file, unsigned initial_size){
@@ -82,26 +80,34 @@ syscall_handler (struct intr_frame *f)
   else if (syscall == SYS_CREATE){
     
     int fd = *((int *)(f->esp)+1);
-    if (!isValid_ptr((void*)fd)) f->eax = 0;
-    int size = *((int*)(f->esp)+2) ;
-    lock_acquire(&file_lock);
-    bool created = create((char*) fd, size);
-    lock_release(&file_lock);
-    f->eax = created;
+    char* fdc = (char *) *get_paramater(f->esp,4);
+    if (!isValid_ptr((void*)fd)) exiter(-1);
+    
+      int size = *((int*)(f->esp)+2) ;
+      lock_acquire(&file_lock);
+      bool created = create((char*) fd, size);
+      lock_release(&file_lock);
+      f->eax = created;  
+    
+    
     //filesys_create();
   }
   else if (syscall == SYS_REMOVE){
     int fd = *((int *)(f->esp)+1);
-    if (!isValid_ptr((void*)fd)) f->eax = false;
-    lock_acquire(&file_lock);
-    bool removed = remove((char*)fd);
-    lock_release(&file_lock);
-    f->eax = (removed==true) ? true : false ;
+    char* fdc = (char *) *get_paramater(f->esp,4);
+    if (!isValid_ptr((void*)fd)) exiter(-1);
+    
+      lock_acquire(&file_lock);
+      bool removed = remove((char*)fd);
+      lock_release(&file_lock);
+      f->eax = removed ;
+    
+    
   }
   else if (syscall == SYS_OPEN) {
     // Get filename argument from stack
     const char *file = *(const char **)(f->esp + 4);
-      
+  
     // Call your implementation
     f->eax = open(file);
 }
@@ -119,6 +125,7 @@ syscall_handler (struct intr_frame *f)
   
     int fd = *get_paramater(f->esp,4);
     void *bfr = (void *) *get_paramater(f->esp,8);
+    if (!isValid_ptr(bfr)) exiter(-1);
     unsigned size = *get_paramater(f->esp,12);
     
     if(fd<0||fd>=128) return;
@@ -131,7 +138,7 @@ syscall_handler (struct intr_frame *f)
       f->eax = size;
     }
     else if(fd==1){
-      
+      // negative area 
     }
     else{
        struct file *file = thread_current()->fd_table[fd];
@@ -147,6 +154,7 @@ syscall_handler (struct intr_frame *f)
   else if (syscall == SYS_WRITE){
     int file_d = *get_paramater(f->esp,4);
     const void *bfr = (void *) *get_paramater(f->esp,8);
+    if (!isValid_ptr(bfr)) exiter(-1);
     unsigned size = *get_paramater(f->esp,12);
     if(file_d<0||file_d>=128) return;
     if (file_d == 1) {
@@ -156,7 +164,7 @@ syscall_handler (struct intr_frame *f)
       f->eax = size;
     } 
     else if(file_d==0){
-      
+      // negative area
     }
     else{
       struct file* file=thread_current()->fd_table[file_d];
@@ -170,7 +178,7 @@ syscall_handler (struct intr_frame *f)
    
   }
   else if (syscall == SYS_SEEK){
-    //file_seek();
+    seek(f->esp);
   }
   else if (syscall == SYS_TELL){
     //file_tell();
@@ -205,13 +213,22 @@ void validate_ptr(const void *ptr){
  
 }
 int* get_paramater(void *esp,int offset){
-  if (!isValid_ptr((esp + offset))) exiter(-1);
+  if (!isValid_ptr((int *)(esp + offset))) exiter(-1);
   return (int *)(esp + offset);
 }
 
 void halter(){
     shutdown_power_off();
 }
+void seek(void* esp){
+int file_d = *get_paramater(esp,4);
+  struct file* file=thread_current()->fd_table[file_d];
+  int offset=*get_paramater(esp,8);
+  lock_acquire(&file_lock);
+  file_seek(file,offset);
+  lock_release(&file_lock);
+}
+
 
 void exiter(int status){
    struct thread *cur = thread_current();
@@ -221,6 +238,7 @@ void exiter(int status){
 }
 tid_t executer(void* esp){
     char *cmd_line = (char *) *get_paramater(esp,4);
+    if (!isValid_ptr((void*) cmd_line)) return -1 ;
     return process_execute(cmd_line);   
 }
 tid_t waiter(void* esp){

@@ -3,17 +3,17 @@
 tests/%.output: FILESYSSOURCE = --filesys-size=2
 tests/%.output: PUTFILES = $(filter-out kernel.bin loader.bin, $^)
 
-tests/userprog_TESTS = $(addprefix tests/userprog/,wait-bad-pid create-empty exit halt  args-none            \
+tests/userprog_TESTS = $(addprefix tests/userprog/,write-bad-fd read-bad-ptr create-bad-ptr exec-bad-ptr wait-bad-pid create-empty exit halt  args-none            \
 args-single args-multiple args-many args-dbl-space sc-bad-sp            \
 sc-bad-arg sc-boundary sc-boundary-2 sc-boundary-3            \
-create-normal create-null create-bad-ptr create-long       \
+create-normal create-null create-long       \
 create-exists create-bound open-normal open-missing open-boundary       \
 open-empty open-null open-bad-ptr open-twice close-normal               \
 close-twice close-stdin close-stdout close-bad-fd read-normal           \
-read-bad-ptr read-boundary read-zero read-stdout read-bad-fd            \
-write-normal write-bad-ptr write-boundary write-zero write-stdin        \
-write-bad-fd exec-once exec-arg exec-bound exec-bound-2                 \
-exec-bound-3 exec-multiple exec-missing exec-bad-ptr wait-simple        \
+read-boundary read-zero read-stdout read-bad-fd            \
+write-normal write-boundary write-zero write-stdin        \
+write-bad-ptr exec-once exec-arg exec-bound exec-bound-2                 \
+exec-bound-3 exec-multiple exec-missing wait-simple        \
 wait-twice wait-killed multi-recurse multi-child-fd        \
 rox-simple rox-child rox-multichild bad-read bad-write bad-read2        \
 bad-write2 bad-jump bad-jump2)
