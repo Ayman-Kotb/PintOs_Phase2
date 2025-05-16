@@ -26,6 +26,15 @@ static bool remove(const char* file){
   bool removed = filesys_remove(file);
   return removed;
 }
+unsigned tell(void* esp){
+  int file_d = *get_paramater(esp,4);
+  if (!isValid_ptr((void*)file_d)) exiter(-1) ;
+  struct file* file=thread_current()->fd_table[file_d];
+  lock_acquire(&file_lock);
+  unsigned pos = file_tell(file) ;
+  lock_release(&file_lock);
+  return pos ;
+}
 
 struct opened_file {
   int file_d;
@@ -57,10 +66,9 @@ syscall_handler (struct intr_frame *f)
   if (x==0)lock_init(&file_lock);
   x++;
   if (f==NULL ||f->esp == NULL ){
-    thread_exit();
-    return;
+    exiter(-1) ;
   }
-
+  if (!isValid_ptr((void*)f->esp)) exiter(-1);
   int syscall = *(int *) f->esp;
   if (syscall == SYS_HALT){
     halter();
@@ -106,7 +114,9 @@ syscall_handler (struct intr_frame *f)
   }
   else if (syscall == SYS_OPEN) {
     // Get filename argument from stack
+    
     const char *file = *(const char **)(f->esp + 4);
+    if (pagedir_get_page(thread_current()->pagedir, file) ==NULL) exiter(-1);
   
     // Call your implementation
     f->eax = open(file);
@@ -181,7 +191,7 @@ syscall_handler (struct intr_frame *f)
     seek(f->esp);
   }
   else if (syscall == SYS_TELL){
-    //file_tell();
+    f->eax =tell(f->esp);
   }
   else if (syscall == SYS_CLOSE){
     int fd = *(int *)(f->esp + 4);
