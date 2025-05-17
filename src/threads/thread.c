@@ -268,6 +268,7 @@ thread_name (void)
 /* Returns the running thread.
    This is running_thread() plus a couple of sanity checks.
    See the big comment at the top of thread.h for details. */
+ 
 struct thread *
 thread_current (void) 
 {
@@ -481,6 +482,7 @@ init_thread (struct thread *t, const char *name, int priority)
 	t->magic = THREAD_MAGIC;
 	t->parent = NULL ; 
 	t->status_exit=0;
+	t->executing_file = NULL;
     list_init(&t->sons);
 	list_init(&t->holded_locks);
 	sema_init(&t->semaphore1,0);

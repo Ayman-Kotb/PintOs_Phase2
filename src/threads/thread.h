@@ -104,6 +104,7 @@ struct thread
     struct thread* parent; 
     struct thread *waiting_for;
     struct list holded_locks;
+    struct file *executing_file;
 
       
 #ifdef USERPROG

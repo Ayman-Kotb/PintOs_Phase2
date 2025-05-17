@@ -33,18 +33,20 @@ tid_t process_execute(const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-  
+
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
+	
   fn_copy = palloc_get_page(0);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy(fn_copy, file_name, PGSIZE);
+
   
   /* Make another copy for parsing the program name */
   char *name_copy = palloc_get_page(0);
   if (name_copy == NULL) {
-    palloc_free_page(fn_copy);
+	palloc_free_page(fn_copy);
     return TID_ERROR;
   }
   strlcpy(name_copy, file_name, PGSIZE);
@@ -52,19 +54,22 @@ tid_t process_execute(const char *file_name)
   /* Parse the program name (first token) */
   char *save_ptr;
   char *program_name = strtok_r(name_copy, " ", &save_ptr);
+
+  struct file *file = filesys_open(program_name);
+  if (file == NULL) {
+	palloc_free_page(fn_copy);
+	palloc_free_page(name_copy);
+	return -1;
+  }
+  file_close(file);
+
   
   /* Create a new thread to execute FILE_NAME - passing the full command line */
   tid = thread_create(program_name, PRI_DEFAULT, start_process, fn_copy);
   sema_down(&thread_current()->semaphore1);
   if(!thread_current()->success)
     tid = TID_ERROR;
-  
-  if (tid == TID_ERROR) {
-    palloc_free_page(fn_copy);
-    palloc_free_page(name_copy);
-    return tid;
-  }
-  
+
   palloc_free_page(name_copy);  // Free the temporary name copy
   return tid;
 }
@@ -98,7 +103,9 @@ start_process (void *file_name_)
 
     //////////////////
 	/* If load failed, quit. */
+	
 	palloc_free_page (file_name);
+	
 	if (!success)
 		thread_exit ();
 	else{
@@ -154,10 +161,10 @@ process_wait (tid_t child_tid)
 /* Free the current process's resources. */
 void process_exit(void) {
     struct thread *cur = thread_current();
-    while(!list_empty(&cur->holded_locks)){
-	    struct list_elem *e = list_pop_front(&cur->sons);	
-		 struct lock *l = list_entry(e, struct lock, holded);
-		 lock_release(&l);
+	while (!list_empty(&cur->holded_locks)) {
+		struct list_elem *e = list_pop_front(&cur->holded_locks);
+		struct lock *l = list_entry(e, struct lock, holded);
+		lock_release(l);
 	}
 	for(int fd=2;fd<128;fd++){
 		if(cur->fd_table[fd]!=NULL){
@@ -173,9 +180,14 @@ void process_exit(void) {
         sema_up(&child->semaphore1);
     }
     // Notify parent
-    if (cur->parent->waiting_for==cur) {
-        sema_up(&cur->parent->semaphore1);
-    }
+	if (cur->parent != NULL && cur->parent->waiting_for == cur) {
+		sema_up(&cur->parent->semaphore1);
+	}
+	if (cur->executing_file != NULL) {
+		file_allow_write(cur->executing_file);  
+		file_close(cur->executing_file);        
+		cur->executing_file = NULL;
+	}
 
     
     // Clean up page directory
@@ -298,6 +310,7 @@ load (const char *file_name, void (**eip) (void), void **esp, char **save_ptr)
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
 	}
+	t->executing_file = file;    
 	file_deny_write(file);
 
 	/* Read and verify executable header. */
@@ -383,8 +396,6 @@ load (const char *file_name, void (**eip) (void), void **esp, char **save_ptr)
 
 	done:
 	/* We arrive here whether the load is successful or not. */
-	file_deny_write(file);
-	file_close (file);
 	return success;
 }
 

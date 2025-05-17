@@ -112,14 +112,21 @@ syscall_handler (struct intr_frame *f)
     
     
   }
-  else if (syscall == SYS_OPEN) {
-    // Get filename argument from stack
-    
-    const char *file = *(const char **)(f->esp + 4);
-    if (pagedir_get_page(thread_current()->pagedir, file) ==NULL) exiter(-1);
-  
-    // Call your implementation
-    f->eax = open(file);
+else if (syscall == SYS_OPEN) {
+  // Step 1: check the pointer to the argument itself (f->esp + 4)
+  void *arg_ptr = f->esp + 4;
+  if (!is_user_vaddr(arg_ptr) || pagedir_get_page(thread_current()->pagedir, arg_ptr) == NULL)
+    exiter(-1);
+
+  // Step 2: now get the string pointer from user stack
+  const char *file = *(const char **)arg_ptr;
+
+  // Step 3: check if the string pointer is also in user space
+  if (!is_user_vaddr(file) || pagedir_get_page(thread_current()->pagedir, file) == NULL)
+    exiter(-1);
+
+  // Step 4: call your open
+  f->eax = open(file);
 }
   else if (syscall == SYS_FILESIZE){
     int file_d=*get_paramater(f->esp,4);
