@@ -150,7 +150,6 @@ process_wait (tid_t child_tid)
 	}
     if(!flag&&!list_empty(&tmp->sons)) {
 		sema_up(&child->semaphore1);
-		list_remove(&child->son);
 		thread_current()->waiting_for=child;
 		sema_down(&thread_current()->semaphore1);
 	}
@@ -172,6 +171,7 @@ void process_exit(void) {
 		cur->fd_table[fd]=NULL;
 		}
 	}
+	list_remove(&thread_current()->son);
     // Notify all children
     while (!list_empty(&cur->sons)) {
         struct list_elem *e = list_pop_front(&cur->sons);
@@ -180,6 +180,7 @@ void process_exit(void) {
         sema_up(&child->semaphore1);
     }
     // Notify parent
+	//comment
 	if (cur->parent != NULL && cur->parent->waiting_for == cur) {
 		sema_up(&cur->parent->semaphore1);
 	}
